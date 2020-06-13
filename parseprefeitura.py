@@ -35,6 +35,7 @@ risol = re.compile(r'.*\D(\d+) em isolamento.*')
 datafile = "https://www.jaraguadosul.sc.gov.br/boletim-coronavirus"
 exportcsv = "cvd-jaragua.csv"
 exportpng = "cvd-jaragua.png"
+exportpredict = "cvd-jaragua-predict.png"
 
 outdf = pd.DataFrame()
 
@@ -110,6 +111,7 @@ ax2.plot(outdf.date,outdf.recinc.rolling(window=meanspan,min_periods=meanspan).m
 
 plt.gcf().autofmt_xdate()
 plt.legend()
+plt.savefig(exportpng,dpi=300)
 
 fig2, ax3 = plt.subplots()
 #print(max(x))
@@ -139,5 +141,5 @@ mean_squared_error(y,y_pred_exp)
 
 
 
-plt.savefig(exportpng,dpi=300)
+plt.savefig(exportpredict,dpi=300)
 plt.show()
