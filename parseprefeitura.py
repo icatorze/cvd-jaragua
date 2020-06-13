@@ -9,6 +9,19 @@ import re
 import datetime
 import matplotlib.pyplot as plt
 
+import numpy as np
+from datetime import datetime,timedelta
+from sklearn.metrics import mean_squared_error
+from scipy.optimize import curve_fit
+from scipy.optimize import fsolve
+import matplotlib.pyplot as plt
+
+def logistic_model(x,a,b,c):
+    return c/(1+np.exp(-(x-b)/a))
+
+def exponential_model(x,a,b,c):
+    return a*np.exp(b*(x-c))
+
 rdate = re.compile(r'Boletim.*(\d{2}\/\d+\/\d+).* (\d+) casos.* (\d+) recuperados.* (\d+) em isolamento.* (\d+) internado.* (\d+).*bito.*')
 
 rdata = re.compile(r'Boletim.*(\d{2}\/\d+\/\d+).*')
@@ -37,12 +50,13 @@ def searchtable(rgx, value):
     return ret
     
 
-outdf['date'] = df[0][0].map(lambda x: datetime.datetime.strptime(str(searchtable(rdata,x)),"%d/%m/%Y") if searchtable(rdata,x) else None)
+outdf['date'] = df[0][0].map(lambda x: datetime.strptime(str(searchtable(rdata,x)),"%d/%m/%Y") if searchtable(rdata,x) else None)
 outdf['casos'] = df[0][0].map(lambda x: int(searchtable(rcasos,x)) if searchtable(rcasos,x) else None)
 outdf['isol'] = df[0][0].map(lambda x: int(searchtable(risol,x)) if searchtable(risol,x) else 0)
 outdf['recup'] = df[0][0].map(lambda x: int(searchtable(rrecup,x)) if searchtable(rrecup,x) else None)
 outdf['dead'] = df[0][0].map(lambda x: int(searchtable(robito,x)) if searchtable(robito,x) else 0)
 outdf['intern'] = df[0][0].map(lambda x: int(searchtable(rintern,x)) if searchtable(rintern,x) else 0)
+outdf['dia'] = outdf['date'].map(lambda x: (x - datetime.strptime("06/04/2020","%d/%m/%Y")).days)
 
 outdf['increm'] = outdf.casos.diff(-1)
 outdf['recinc'] = outdf.recup.diff(-1)
@@ -50,9 +64,35 @@ outdf = outdf.dropna()
 outdf.to_csv(exportcsv,sep=";")
 #print(outdf)
 
+#Predicao 
+x = list(outdf.iloc[::-1,6])
+
+y = list(outdf.iloc[::-1,1])
+
+## a = infection speed
+## b = day of max infection
+## c = number of max infected
+fit = curve_fit(logistic_model,x,y,p0=[15,180,1000])
+errors = [np.sqrt(fit[1][i][i]) for i in [0,1,2]]
+
+#print("fit",fit[0])
+
+#print("error",errors)
+
+a,b,c = fit[0]
+
+sol = int(fsolve(lambda x : logistic_model(x,a,b,c) - int(c),b))
+
+#print("sol",sol)
+
+exp_fit = curve_fit(exponential_model,x,y,p0=[1,1,1],maxfev=5000)
+
+
+
 meanspan = 7
 
 fig, (ax1, ax2) = plt.subplots(2, sharex=True)
+
 axs=plt.gca()
 axd=plt.gca()
 
@@ -70,5 +110,34 @@ ax2.plot(outdf.date,outdf.recinc.rolling(window=meanspan,min_periods=meanspan).m
 
 plt.gcf().autofmt_xdate()
 plt.legend()
+
+fig2, ax3 = plt.subplots()
+#print(max(x))
+pred_x = list(range(int(max(x)),sol))
+#ax3.rcParams['figure.figsize'] = [7, 7]
+#ax3.rc('font', size=14)# Real data
+ax3.scatter(x,y,label="Real data",color="red")# Predicted logistic curve
+ax3.plot(x+pred_x, [logistic_model(i,fit[0][0],fit[0][1],fit[0][2]) for i in x+pred_x], label="Logistic model" )# Predicted exponential curve
+ax3.plot(x+pred_x, [exponential_model(i,exp_fit[0][0],exp_fit[0][1],exp_fit[0][2]) for i in x+pred_x], label="Exponential model" )
+ax3.legend()
+ax3.grid(color='black',linestyle='solid') 
+#ax3.xlabel("Days since 13 Marco 2020")
+#ax3.ylabel("Total number of infected people")
+plt.ylim((min(y)*0.9,c*1.1))
+
+plt.axvline(b,color='g')
+plt.axvline(sol,color='r')
+plt.axhline(c,color='g')
+#plt.show()
+
+y_pred_logistic = [logistic_model(i,fit[0][0],fit[0][1],fit[0][2]) for i in x]
+y_pred_exp =  [exponential_model(i,exp_fit[0][0], exp_fit[0][1], exp_fit[0][2]) for i in x]
+mean_squared_error(y,y_pred_logistic)
+mean_squared_error(y,y_pred_exp)
+
+
+
+
+
 plt.savefig(exportpng,dpi=300)
 plt.show()
